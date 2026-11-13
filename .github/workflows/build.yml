@@ -1,0 +1,111 @@
+# Godot 4.7.2 Android export template (template_release, arm32 + arm64) without unused modules.
+# Same base flags as the official templates (godot-build-scripts: production=yes, Swappy frame pacing);
+# only features with zero usage in the target game are turned off. The result is published as a Release.
+name: Build slim Android template
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/build.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GODOT_REF: 4.7.2-stable
+  RELEASE_TAG: 4.7.2-slim-1
+  SCONS_FLAGS: >-
+    platform=android target=template_release production=yes debug_symbols=no swappy=yes
+    disable_3d=yes disable_physics_3d=yes disable_navigation_2d=yes disable_navigation_3d=yes disable_xr=yes
+    module_csg_enabled=no module_gridmap_enabled=no module_gltf_enabled=no module_fbx_enabled=no
+    module_jolt_physics_enabled=no module_godot_physics_3d_enabled=no
+    module_navigation_2d_enabled=no module_navigation_3d_enabled=no
+    module_openxr_enabled=no module_mobile_vr_enabled=no module_webxr_enabled=no
+    module_theora_enabled=no module_webrtc_enabled=no module_websocket_enabled=no module_upnp_enabled=no
+    module_jsonrpc_enabled=no module_camera_enabled=no module_interactive_music_enabled=no
+    module_visual_shader_enabled=no module_msdfgen_enabled=no
+    module_lightmapper_rd_enabled=no module_raycast_enabled=no module_xatlas_unwrap_enabled=no
+    module_vhacd_enabled=no module_meshoptimizer_enabled=no
+    module_ktx_enabled=no module_dds_enabled=no module_tga_enabled=no module_hdr_enabled=no module_bmp_enabled=no
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - name: Checkout Godot
+        uses: actions/checkout@v4
+        with:
+          repository: godotengine/godot
+          ref: ${{ env.GODOT_REF }}
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Python and SCons
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Install SCons
+        run: python -m pip install scons==4.10.1
+
+      - name: Download Swappy
+        run: python ./misc/scripts/install_swappy_android.py
+
+      - name: Build arm32
+        run: scons -j$(nproc) arch=arm32 $SCONS_FLAGS
+
+      - name: Build arm64
+        run: scons -j$(nproc) arch=arm64 $SCONS_FLAGS
+
+      - name: Generate templates
+        run: |
+          cd platform/android/java
+          ./gradlew generateGodotTemplates
+          cd ../../..
+          ls -l bin/
+
+      - name: Check result
+        run: |
+          set -e
+          AAR=bin/godot-lib.template_release.aar
+          test -f "$AAR"
+          mkdir -p check && cd check && unzip -q ../$AAR
+          {
+            echo "## Sizes"
+            ls -l jni/*/libgodot_android.so | awk '{printf "- %s: %.1f MB\n", $9, $5/1000000}'
+            echo "## Markers (arm64)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          SO=jni/arm64-v8a/libgodot_android.so
+          must_have() { n=$(grep -c -a "$1" "$SO" || true); echo "- $1: $n (must be > 0)" >> "$GITHUB_STEP_SUMMARY"; [ "$n" -gt 0 ]; }
+          must_have Swappy
+          must_have ENetConnection
+          must_have StreamPeerTLS
+          must_have FastNoiseLite
+          must_have RegEx
+          must_have AudioStreamOggVorbis
+          must_have AudioStreamMP3
+          must_have AStarGrid2D
+          must_have PointLight2D
+          must_have GPUParticles2D
+          must_have RichTextLabel
+          must_have FileDialog
+          must_have TextServerAdvanced
+          for gone in JoltPhysics OpenXR GLTFDocument VideoStreamTheora Node3D; do
+            echo "- $gone: $(grep -c -a "$gone" "$SO" || true) (expected 0)" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Godot $GODOT_REF slim Android template" \
+            --notes "template_release arm32 + arm64. Flags: $SCONS_FLAGS" \
+            $(ls bin/godot-lib.template_release.aar bin/android_source.zip 2>/dev/null)
