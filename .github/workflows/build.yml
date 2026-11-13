@@ -1,6 +1,7 @@
 # Godot 4.7.2 Android export templates (template_release + template_debug, arm32 + arm64) without unused modules.
 # Same base flags as the official templates (godot-build-scripts: production=yes, Swappy frame pacing);
 # only features with zero usage in the target game are turned off. The result is published as a Release.
+# slim-2: no Vulkan (the game renders with gl_compatibility on Android, so the RenderingDevice code is not needed).
 name: Build slim Android template
 
 on:
@@ -14,9 +15,9 @@ permissions:
 
 env:
   GODOT_REF: 4.7.2-stable
-  RELEASE_TAG: 4.7.2-slim-1
+  RELEASE_TAG: 4.7.2-slim-2
   SCONS_FLAGS: >-
-    platform=android production=yes debug_symbols=no swappy=yes
+    platform=android production=yes debug_symbols=no swappy=yes vulkan=no module_glslang_enabled=no
     disable_3d=yes disable_physics_3d=yes disable_navigation_2d=yes disable_navigation_3d=yes disable_xr=yes
     module_csg_enabled=no module_gridmap_enabled=no module_gltf_enabled=no module_fbx_enabled=no
     module_jolt_physics_enabled=no module_godot_physics_3d_enabled=no
@@ -103,7 +104,8 @@ jobs:
           must_have RichTextLabel
           must_have FileDialog
           must_have TextServerAdvanced
-          for gone in JoltPhysics OpenXR GLTFDocument VideoStreamTheora Node3D; do
+          must_have RasterizerGLES3
+          for gone in JoltPhysics OpenXR GLTFDocument VideoStreamTheora Node3D RenderingDeviceVulkan; do
             echo "- $gone: $(grep -c -a "$gone" "$SO" || true) (expected 0)" >> "$GITHUB_STEP_SUMMARY"
           done
 
