@@ -104,7 +104,7 @@ jobs:
           must_have RichTextLabel
           must_have FileDialog
           must_have TextServerAdvanced
-          must_have RasterizerGLES3
+          must_have "OpenGL API"
           for gone in JoltPhysics OpenXR GLTFDocument VideoStreamTheora Node3D RenderingDeviceVulkan; do
             echo "- $gone: $(grep -c -a "$gone" "$SO" || true) (expected 0)" >> "$GITHUB_STEP_SUMMARY"
           done
