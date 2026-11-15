@@ -1,7 +1,8 @@
-# Godot 4.7.2 Android export templates (template_release + template_debug, arm32 + arm64) without unused modules.
+# Godot 4.7.2 Android export templates (template_release + template_debug, arm32 + arm64 + x86_64) without unused modules.
 # Same base flags as the official templates (godot-build-scripts: production=yes, Swappy frame pacing);
 # only features with zero usage in the target game are turned off. The result is published as a Release.
 # slim-2: no Vulkan (the game renders with gl_compatibility on Android, so the RenderingDevice code is not needed).
+# slim-3: also x86_64 (Google Play Games on PC: full certification needs an x86-64 build; phones keep arm only).
 name: Build slim Android template
 
 on:
@@ -15,7 +16,7 @@ permissions:
 
 env:
   GODOT_REF: 4.7.2-stable
-  RELEASE_TAG: 4.7.2-slim-2
+  RELEASE_TAG: 4.7.2-slim-3
   SCONS_FLAGS: >-
     platform=android production=yes debug_symbols=no swappy=yes vulkan=no module_glslang_enabled=no
     disable_3d=yes disable_physics_3d=yes disable_navigation_2d=yes disable_navigation_3d=yes disable_xr=yes
@@ -64,11 +65,17 @@ jobs:
       - name: Build release arm64
         run: scons -j$(nproc) target=template_release arch=arm64 $SCONS_FLAGS
 
+      - name: Build release x86_64
+        run: scons -j$(nproc) target=template_release arch=x86_64 $SCONS_FLAGS
+
       - name: Build debug arm32
         run: scons -j$(nproc) target=template_debug arch=arm32 $SCONS_FLAGS
 
       - name: Build debug arm64
         run: scons -j$(nproc) target=template_debug arch=arm64 $SCONS_FLAGS
+
+      - name: Build debug x86_64
+        run: scons -j$(nproc) target=template_debug arch=x86_64 $SCONS_FLAGS
 
       - name: Generate templates
         run: |
@@ -83,6 +90,7 @@ jobs:
           test -f bin/godot-lib.template_debug.aar
           AAR=bin/godot-lib.template_release.aar
           test -f "$AAR"
+          unzip -l "$AAR" | grep -q "jni/x86_64/libgodot_android.so"
           mkdir -p check && cd check && unzip -q ../$AAR
           {
             echo "## Sizes"
@@ -116,5 +124,5 @@ jobs:
           gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
           gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Godot $GODOT_REF slim Android template" \
-            --notes "template_release + template_debug, arm32 + arm64. Flags: $SCONS_FLAGS" \
+            --notes "template_release + template_debug, arm32 + arm64 + x86_64. Flags: $SCONS_FLAGS" \
             $(ls bin/godot-lib.template_release.aar bin/godot-lib.template_debug.aar bin/android_source.zip 2>/dev/null)
